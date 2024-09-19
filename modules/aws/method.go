@@ -4,8 +4,10 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 
 	"github.com/risor-io/risor/internal/arg"
@@ -37,6 +39,17 @@ func NewMethod(name string, obj interface{}, method *GoMethod) *object.Builtin {
 			if err != nil {
 				return err
 			}
+
+			// TEMP
+			var putObjBodyHack object.Object
+			if name == "aws.s3.put_object" {
+				putObjBodyHack = m.Get("Body")
+				if putObjBodyHack != object.Nil {
+					m.Delete("Body")
+				}
+			}
+			// END TEMP
+
 			paramData, jsErr := json.Marshal(m.Interface())
 			if jsErr != nil {
 				return object.NewError(jsErr)
@@ -44,6 +57,17 @@ func NewMethod(name string, obj interface{}, method *GoMethod) *object.Builtin {
 			if err := json.Unmarshal(paramData, inst.Interface()); err != nil {
 				return object.NewError(err)
 			}
+
+			// TEMP
+			if putObjBodyHack != nil {
+				switch putObjBodyHack.Type() {
+				case object.BYTE_SLICE:
+					inst.Elem().FieldByName("Body").Set(reflect.ValueOf(bytes.NewReader(putObjBodyHack.Interface().([]byte))))
+				default:
+					return object.NewError(errors.New("Body must be a byte slice"))
+				}
+			}
+			// END TEMP
 		}
 		inputs[2] = inst
 
